@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Road Rush</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏁</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Russo+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="wrap">
+  <div id="stage">
+    <canvas id="game" width="1600" height="900"></canvas>
+
+    <button id="mute" type="button" aria-label="Toggle sound">SOUND ON</button>
+
+    <div id="screen" class="screen">
+      <video id="clip-intro" class="clip" src="assets/intro.mp4" muted loop playsinline preload="auto"></video>
+      <video id="clip-crash" class="clip" src="assets/crash.mp4" playsinline preload="auto"></video>
+      <video id="clip-best" class="clip" src="assets/best.mp4" playsinline preload="auto"></video>
+      <div class="panel">
+        <h1 id="screen-title">ROAD RUSH</h1>
+        <p id="screen-text">Dodge the traffic. How far can you go?</p>
+        <button id="screen-btn" type="button">RACE</button>
+        <p class="keys">Arrows / WASD to drive. Or use the wheel and pedals on screen.</p>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div id="rotate-hint">Turn your phone sideways</div>
+
+  <script src="assets/cut/info.js" onerror="window.ASSET_INFO = null"></script>
+  <script src="game.js"></script>
+</body>
+</html>
