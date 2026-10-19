@@ -7,8 +7,11 @@ The art is AI-generated: the road, car, steering wheel and pedals came from Chat
 ## Controls
 
 - **Keyboard:** arrows or WASD. Up is gas, down or Space is brake.
-- **Mouse / touch:** drag the steering wheel and hold the pedals. On a phone, play with it turned sideways.
+- **Phone / touch:** hold the phone sideways. Put a thumb anywhere left of the road and slide it to steer. Anywhere right of the road is the pedals: brake on the inner half, gas on the outer half, and you can slide between them.
+- **Mouse:** same zones as touch.
 - **M** toggles sound.
+
+On Android, tapping RACE goes fullscreen and hides the browser bar. On iPhone, use Share → Add to Home Screen, and it opens as a full-screen app.
 
 ## Run it locally
 

@@ -2,7 +2,9 @@
   'use strict';
 
   // ---- tuning ----
-  const W = 1600, H = 900;
+  // Height is fixed; width follows the screen's shape so wide phones fill edge to edge (more grass at the sides).
+  const H = 900, BASE_W = 1600, MIN_W = 1200, MAX_W = 2600;
+  let W = BASE_W;
   const MAX_KMH = 300;       // holding the gas takes you all the way here (about 6 s from a standstill)
   const RAMP_KM = 5;         // traffic gets busier until this distance, then stays at its busiest
   const ACCEL = 80;          // km/h gained per second on full gas (eases off near top speed)
@@ -20,20 +22,21 @@
 
   const info = window.ASSET_INFO || {};
   const road = Object.assign({ left: 0.31, right: 0.69, lanes: 3 }, info.road);
-  // The road picture is drawn wider than the canvas so the lanes are roomy; grass gets cropped.
-  const roadZoom = Math.max(1, ROAD_SCREEN_W / ((road.right - road.left) * W));
-  const roadDW = W * roadZoom, roadDX = (W - roadDW) / 2;
-  const roadL = roadDX + road.left * roadDW, roadR = roadDX + road.right * roadDW;
-  const laneW = (roadR - roadL) / road.lanes;
+  // The road picture is scaled so the asphalt is ROAD_SCREEN_W wide, centred on the canvas. Past its
+  // edges it repeats mirrored, so any screen width (and the zoomed-out camera) stays covered in grass.
+  const roadZoom = Math.max(1, ROAD_SCREEN_W / ((road.right - road.left) * BASE_W));
+  const roadDW = BASE_W * roadZoom;
+  const laneW = (road.right - road.left) * roadDW / road.lanes;
+  let roadDX = 0, roadL = 0, roadR = 0;
   const laneX = i => roadL + laneW * (i + 0.5);
-  const minZoom = Math.max(MIN_ZOOM, W / roadDW + 0.01);   // never pull back past the edge of the road picture
+  const minZoom = MIN_ZOOM;
 
   const $ = id => document.getElementById(id);
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
   const stage = $('stage');
   const screenEl = $('screen'), titleEl = $('screen-title'), textEl = $('screen-text');
-  const btnEl = $('screen-btn'), muteEl = $('mute');
+  const btnEl = $('screen-btn'), muteEl = $('mute'), fsEl = $('fullscreen'), rotatePlayEl = $('rotate-play');
   const clips = { title: $('clip-intro'), over: $('clip-crash'), best: $('clip-best') };
   const clipBroken = {};
 
@@ -197,23 +200,46 @@
   }
 
   function layout() {
-    const grassL = roadL, grassR = W - roadR;
-    const r = Math.min(160, grassL * 0.4);
-    ui.wheel = { x: grassL / 2, y: H - r - 60, r };
-    const k = Math.min(1, grassR / 480);
-    const cx = roadR + grassR / 2;
-    ui.brake = fitBox(A.brake, cx - 90 * k, 170 * k, 190 * k);
-    ui.gas = fitBox(A.gas, cx + 90 * k, 130 * k, 250 * k);
     Object.assign(player, carSize(A.car));
     player.y = H - player.h / 2 - 90;
     // traffic appears just above the top of the view when the camera is pulled all the way back
     spawnTop = player.y - player.y / minZoom - 30;
+  }
+
+  // Things that depend on the canvas width: road position and the on-screen controls.
+  function layoutScreen() {
+    roadDX = (W - roadDW) / 2;
+    roadL = roadDX + road.left * roadDW;
+    roadR = roadDX + road.right * roadDW;
+    const grassL = roadL, grassR = W - roadR;
+    // controls grow into whatever grass the screen shape leaves, so wide phones get big thumbs targets
+    const r = clamp(Math.min(grassL * 0.38, H * 0.24), 90, 230);
+    ui.wheel = { x: grassL / 2, y: H - r - 50, r };
+    const k = clamp(grassR / 480, 0.6, 1.5);
+    const cx = roadR + grassR / 2;
+    ui.brake = fitBox(A.brake, cx - 90 * k, 170 * k, 190 * k);
+    ui.gas = fitBox(A.gas, cx + 90 * k, 130 * k, 250 * k);
+    ui.pedalSplit = cx;    // touches right of the road: left of this is brake, right of it is gas
+    ui.zoneTop = 230;      // pedal zone starts below the HUD
     vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, W * 0.62);
     vignette.addColorStop(0, 'rgba(0,0,0,0)');
     vignette.addColorStop(1, 'rgba(0,0,0,1)');
   }
 
-  function fitStage() {
+  function setWidth(w) {
+    const shift = (w - W) / 2;
+    W = w;
+    canvas.width = W;      // resets the context; the next frame redraws everything
+    stage.style.width = W + 'px';
+    player.x += shift;
+    for (const c of traffic) c.x += shift;
+    for (const s of streaks) s.x += shift;
+    layoutScreen();
+  }
+
+  function fitStage(force) {
+    const w = Math.round(clamp(H * innerWidth / innerHeight, MIN_W, MAX_W));
+    if (force === true || (w !== W && A.brake)) setWidth(w);
     const s = Math.min(innerWidth / W, innerHeight / H);
     stage.style.transform = `translate(${-W * s / 2}px, ${-H * s / 2}px) scale(${s})`;
   }
@@ -224,7 +250,7 @@
     ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
     ArrowUp: 'gas', KeyW: 'gas', ArrowDown: 'brake', KeyS: 'brake', Space: 'brake',
   };
-  const touch = { wheelId: null, startAngle: 0, startSteer: 0, wheelSteer: 0, gas: new Set(), brake: new Set() };
+  const touch = { wheelId: null, startX: 0, startSteer: 0, wheelSteer: 0, gas: new Set(), brake: new Set() };
 
   addEventListener('keydown', e => {
     const k = KEYMAP[e.code];
@@ -245,20 +271,25 @@
     const r = canvas.getBoundingClientRect();
     return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
   }
-  const inBox = (p, b) => p.x > b.x - 12 && p.x < b.x + b.w + 12 && p.y > b.y - 12 && p.y < b.y + b.h + 12;
-  const wheelAngle = p => Math.atan2(p.y - ui.wheel.y, p.x - ui.wheel.x);
+  // Big touch zones: anywhere left of the road is the wheel (slide sideways to steer), anywhere right of
+  // the road below the HUD is the pedals (brake on the inner half, gas on the outer half).
+  const pedalAt = p => (p.x <= roadR || p.y < ui.zoneTop) ? null : p.x < ui.pedalSplit ? 'brake' : 'gas';
+  function setPedal(id, which) {
+    touch.gas.delete(id);
+    touch.brake.delete(id);
+    if (which) touch[which].add(id);
+  }
 
   canvas.addEventListener('pointerdown', e => {
     const p = toStage(e);
-    if (Math.hypot(p.x - ui.wheel.x, p.y - ui.wheel.y) < ui.wheel.r * 1.2) {
+    const pedal = pedalAt(p);
+    if (p.x < roadL) {
       touch.wheelId = e.pointerId;
-      touch.startAngle = wheelAngle(p);
+      touch.startX = p.x;
       touch.startSteer = steer;
       touch.wheelSteer = steer;
-    } else if (inBox(p, ui.gas)) {
-      touch.gas.add(e.pointerId);
-    } else if (inBox(p, ui.brake)) {
-      touch.brake.add(e.pointerId);
+    } else if (pedal) {
+      setPedal(e.pointerId, pedal);
     } else {
       return;
     }
@@ -267,15 +298,18 @@
     initAudio();
   });
   canvas.addEventListener('pointermove', e => {
-    if (e.pointerId !== touch.wheelId) return;
-    let d = wheelAngle(toStage(e)) - touch.startAngle;
-    d = Math.atan2(Math.sin(d), Math.cos(d));
-    touch.wheelSteer = clamp(touch.startSteer + d / STEER_LOCK, -1, 1);
+    if (e.pointerId === touch.wheelId) {
+      const dx = toStage(e).x - touch.startX;
+      touch.wheelSteer = clamp(touch.startSteer + dx / (ui.wheel.r * 1.1), -1, 1);
+    } else if (touch.gas.has(e.pointerId) || touch.brake.has(e.pointerId)) {
+      // a thumb can slide between the pedals; drifting out of the zone keeps the current pedal
+      const pedal = pedalAt(toStage(e));
+      if (pedal) setPedal(e.pointerId, pedal);
+    }
   });
   const release = e => {
     if (e.pointerId === touch.wheelId) touch.wheelId = null;
-    touch.gas.delete(e.pointerId);
-    touch.brake.delete(e.pointerId);
+    setPedal(e.pointerId, null);
   };
   canvas.addEventListener('pointerup', release);
   canvas.addEventListener('pointercancel', release);
@@ -288,6 +322,32 @@
     if (state === 'title' || e.target === btnEl) startRun();
   });
   muteEl.addEventListener('click', e => { e.stopPropagation(); toggleMute(); muteEl.blur(); });
+
+  // ---- fullscreen: hides the browser's address bar (Android browsers; iPhones need Add to Home Screen) ----
+  const docEl = document.documentElement;
+  const canFullscreen = !!(docEl.requestFullscreen || docEl.webkitRequestFullscreen);
+  const isFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const isTouchDevice = matchMedia('(pointer: coarse)').matches;
+  let autoFullscreenTried = false;
+
+  function enterFullscreen() {
+    if (!canFullscreen || isFullscreen()) return;
+    const lockLandscape = () => {
+      try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) { /* not supported */ }
+    };
+    try {
+      const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+      const p = req.call(docEl, { navigationUI: 'hide' });
+      if (p && p.then) p.then(lockLandscape, () => {}); else lockLandscape();
+    } catch (e) { /* the browser said no */ }
+  }
+  const updateFullscreenButton = () => { fsEl.hidden = !canFullscreen || isFullscreen(); };
+  fsEl.addEventListener('click', e => { e.stopPropagation(); enterFullscreen(); fsEl.blur(); });
+  rotatePlayEl.hidden = !canFullscreen;
+  rotatePlayEl.addEventListener('click', enterFullscreen);
+  document.addEventListener('fullscreenchange', updateFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+  updateFullscreenButton();
 
   // ---- sound: a synth engine whose pitch follows speed, plus a noise burst for crashes ----
   const sound = { ctx: null, muted: false };
@@ -411,6 +471,8 @@
 
   function startRun() {
     if (!['title', 'over'].includes(state) || btnEl.disabled) return;
+    // on phones, the first RACE tap also goes fullscreen so the browser bar gets out of the way
+    if (isTouchDevice && !autoFullscreenTried) { autoFullscreenTried = true; enterFullscreen(); }
     initAudio();
     resetRun();
     state = 'playing';
@@ -510,33 +572,38 @@
   }
 
   // ---- drawing ----
-  function drawRoadPass(top, bottom, lag) {
+  function drawRoadPass(view, lag) {
     const th = roadDW * A.road.height / A.road.width;
     const off = (scroll - lag) % (2 * th);
-    // every other tile is flipped upside down, so tile edges always meet their own mirror image
-    for (let i = Math.floor((top - off) / th); i * th + off < bottom; i++) {
+    const odd = n => (n % 2 + 2) % 2 === 1;
+    // Neighbouring tiles are mirrored (upside down above/below, left-right beside), so every tile
+    // edge meets its own mirror image and the seams never show.
+    for (let i = Math.floor((view.top - off) / th); i * th + off < view.bottom; i++) {
       const y = i * th + off;
-      if ((i % 2 + 2) % 2 === 1) {
+      for (let j = Math.floor((view.left - roadDX) / roadDW); roadDX + j * roadDW < view.right; j++) {
+        const x = roadDX + j * roadDW, fx = odd(j), fy = odd(i);
+        if (!fx && !fy) {
+          ctx.drawImage(A.road, x, y, roadDW, th);
+          continue;
+        }
         ctx.save();
-        ctx.translate(0, y + th);
-        ctx.scale(1, -1);
-        ctx.drawImage(A.road, roadDX, 0, roadDW, th);
+        ctx.translate(fx ? x + roadDW : x, fy ? y + th : y);
+        ctx.scale(fx ? -1 : 1, fy ? -1 : 1);
+        ctx.drawImage(A.road, 0, 0, roadDW, th);
         ctx.restore();
-      } else {
-        ctx.drawImage(A.road, roadDX, y, roadDW, th);
       }
     }
   }
 
-  function drawRoad(top, bottom, k) {
-    drawRoadPass(top, bottom, 0);
+  function drawRoad(view, k) {
+    drawRoadPass(view, 0);
     if (k < 0.3) return;
     // cheap motion blur: faint copies of the road where it was a moment ago
     const perFrame = speed * PX_PER_KMH / 60, a = 0.4 * (k - 0.3) / 0.7;
     ctx.globalAlpha = a;
-    drawRoadPass(top, bottom, perFrame * 0.5);
+    drawRoadPass(view, perFrame * 0.5);
     ctx.globalAlpha = a * 0.6;
-    drawRoadPass(top, bottom, perFrame);
+    drawRoadPass(view, perFrame);
     ctx.globalAlpha = 1;
   }
 
@@ -651,7 +718,10 @@
     ctx.translate(W / 2, player.y);
     ctx.scale(zoom, zoom);
     ctx.translate(-W / 2, -player.y);
-    drawRoad(player.y - player.y / zoom - 40, player.y + (H - player.y) / zoom + 40, k);
+    drawRoad({
+      top: player.y - player.y / zoom - 40, bottom: player.y + (H - player.y) / zoom + 40,
+      left: W / 2 - W / 2 / zoom - 40, right: W / 2 + W / 2 / zoom + 40,
+    }, k);
     for (const c of traffic) drawCar(c.img, c.x, c.y, c.w, c.h, 0);
     const braking = state === 'playing' && brakeDown() && speed > 0;
     drawCar(A.car, player.x, player.y, player.w, player.h, player.angle + player.tilt, braking ? brakeLights : null);
@@ -686,6 +756,7 @@
   clips.over.muted = clips.best.muted = sound.muted;
   loadAssets().then(() => {
     layout();
+    fitStage(true);
     resetRun();
     state = 'title';
     showScreen('title');

@@ -6,6 +6,7 @@ Reads the raw generated pictures in assets/ and writes game-ready files to asset
   traffic1.png .. traffic5.png  recoloured copies of the car for traffic
   wheel.png gas.png brake.png   split out of controls.png
   info.js                       road edge positions the game reads at load
+and app icons for "Add to Home Screen": assets/icon-192.png, assets/icon-512.png
 
 Usage: python tools/prep_assets.py [--lanes 3] [--swap-pedals] [--rotate-car 0|90|180|270]
 """
@@ -145,6 +146,21 @@ def recolor(car, mode, shift):
     return out
 
 
+def make_icons(car):
+    """Home-screen icons: the car, tilted, on a dark tile with a red glow. Kept inside the maskable safe zone."""
+    S = 512
+    yy, xx = np.mgrid[0:S, 0:S]
+    d = np.hypot(xx - S / 2, yy - S / 2) / (S / 2)
+    glow = np.clip(1 - d, 0, 1) ** 1.6
+    bg = np.stack([11 + 150 * glow, 13 + 20 * glow, 16 + 26 * glow, np.full_like(glow, 255)], -1)
+    icon = Image.fromarray(bg.astype(np.uint8), "RGBA")
+    c = car.rotate(-28, expand=True, resample=Image.BICUBIC)
+    c = fit(c, int(S * 0.7))
+    icon.alpha_composite(c, ((S - c.width) // 2, (S - c.height) // 2))
+    icon.convert("RGB").save(SRC / "icon-512.png")
+    icon.convert("RGB").resize((192, 192), Image.LANCZOS).save(SRC / "icon-192.png")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--lanes", type=int, default=3)
@@ -178,7 +194,8 @@ def main():
         car.save(OUT / "car.png")
         for i, (mode, shift) in enumerate(TRAFFIC, 1):
             recolor(car, mode, shift).save(OUT / f"traffic{i}.png")
-        print(f"car: {car.width}x{car.height}, plus {len(TRAFFIC)} traffic colours")
+        make_icons(car)
+        print(f"car: {car.width}x{car.height}, plus {len(TRAFFIC)} traffic colours and app icons")
     else:
         print("car: no assets/car.* found, game will draw a placeholder")
 

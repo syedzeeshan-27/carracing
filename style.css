@@ -12,14 +12,19 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Clips the unscaled 1600px stage so it never widens the page (phones would zoom out). */
+[hidden] { display: none !important; }
+
+/* Clips the unscaled stage so it never widens the page (phones would zoom out),
+   and stops pinch / double-tap zoom while playing. */
 #wrap {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
-/* 1600x900 logical stage, scaled to fit by game.js */
+/* 900px-tall logical stage; game.js sets its width to the screen's shape and scales it to fit */
 #stage {
   position: absolute;
   left: 50%;
@@ -38,11 +43,16 @@ html, body {
   touch-action: none;
 }
 
-#mute {
+#corner {
   position: absolute;
   z-index: 5;
   left: 24px;
   top: 20px;
+  display: flex;
+  gap: 12px;
+}
+
+.chip {
   padding: 10px 16px;
   font: inherit;
   font-size: 18px;
@@ -52,6 +62,11 @@ html, body {
   border: 2px solid rgba(255, 255, 255, 0.35);
   border-radius: 10px;
   cursor: pointer;
+}
+
+/* phones show the stage small, so give the corner buttons a finger-sized hit area */
+@media (pointer: coarse) {
+  .chip { padding: 16px 24px; font-size: 28px; border-radius: 14px; }
 }
 
 .screen {
@@ -132,13 +147,27 @@ html, body {
   display: none;
   position: fixed;
   inset: 0;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 28px;
   padding: 24px;
   text-align: center;
   font-size: 28px;
   background: #0b0d10;
   z-index: 10;
+}
+
+#rotate-play {
+  padding: 16px 28px;
+  font: inherit;
+  font-size: 20px;
+  letter-spacing: 2px;
+  color: #fff;
+  background: #e0202c;
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 6px 0 #8d0d14;
 }
 
 @media (orientation: portrait) and (max-width: 700px) {

@@ -18,3 +18,5 @@ Top-down endless dodge game. Plain HTML/CSS/JS, no build step.
 - Recording frames: `canvas.toBlob` stalls to ~1 frame/s when the pane is hidden; use synchronous `toDataURL` and POST it.
 - A Python `ThreadingHTTPServer` (backlog 5) refused frame uploads while videos streamed ("Failed to fetch"); raise `request_queue_size` and retry uploads.
 - Launch-video captions at full width ran into the HUD box top-right; keep captions short and centred over the road.
+- A fixed 16:9 stage letterboxed on real phones (20:9 screen minus the browser bar is ~2.6:1) and made the controls tiny. The stage width now follows the screen shape; always test at ~760x290 (phone landscape) as well as desktop.
+- When the pane emulates a viewport bigger than itself, screenshots show it shrunk with black margins; measure `getBoundingClientRect()` before calling it a layout bug.
