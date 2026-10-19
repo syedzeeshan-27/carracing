@@ -668,12 +668,14 @@
   // ---- boot ----
   // Physics runs in fixed 1/60 s steps, so a slow device drops frames instead of running in slow motion.
   const STEP = 1 / 60;
-  let last = 0, acc = 0;
+  let last = 0, acc = 0, manual = false;
   function frame(now) {
     acc += Math.min(0.25, (now - last) / 1000 || 0);
     last = now;
-    while (acc >= STEP) { update(STEP); acc -= STEP; }
-    draw();
+    if (!manual) {
+      while (acc >= STEP) { update(STEP); acc -= STEP; }
+      draw();
+    }
     updateAudio();
     requestAnimationFrame(frame);
   }
@@ -693,6 +695,12 @@
   // handy for poking at the game from the console while testing
   window.roadRush = {
     get state() { return state; }, get speed() { return speed; }, get dist() { return dist; },
-    get steer() { return steer; }, traffic: () => traffic, player, ui,
+    get steer() { return steer; }, traffic: () => traffic, player, ui, keys, touch,
+    lanes: road.lanes, laneX, TRAFFIC_PX_PER_KMH,
+    // frame-by-frame mode for recording videos: the real-time loop stops and the caller steps time
+    setManual(v) { manual = v; acc = 0; },
+    step() { update(STEP); },
+    render: () => draw(),
+    start: () => startRun(),
   };
 })();

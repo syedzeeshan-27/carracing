@@ -15,3 +15,6 @@ Top-down endless dodge game. Plain HTML/CSS/JS, no build step.
 - The unscaled 1600px stage widened the page layout on phones (zoomed out, off-centre hint); it must stay inside the fixed `#wrap` with `overflow: hidden`.
 - `python -m http.server` let the browser serve a stale cached `index.html`; use `tools/serve.py` (sends `Cache-Control: no-store`).
 - The browser pane cannot run `file://` pages (static snapshot only); test through the local server.
+- Recording frames: `canvas.toBlob` stalls to ~1 frame/s when the pane is hidden; use synchronous `toDataURL` and POST it.
+- A Python `ThreadingHTTPServer` (backlog 5) refused frame uploads while videos streamed ("Failed to fetch"); raise `request_queue_size` and retry uploads.
+- Launch-video captions at full width ran into the HUD box top-right; keep captions short and centred over the road.
